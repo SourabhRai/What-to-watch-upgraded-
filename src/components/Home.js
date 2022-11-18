@@ -8,50 +8,46 @@ import SearchBox from "./SearchBox";
 import AddFavourites from "./AddFavourites";
 import RemoveFavourites from "./RemoveFavourites";
 import SearchBoxuser from "../SearchBoxuser";
+import { db, auth } from "../config/fire";
 
 function Home({ handleLogout }) {
   const [movies, setMovies] = useState([]);
   const [searchValue, setSearchValue] = useState([]);
   const [searchUser, setSearchUser] = useState([]);
 
-  const [favourites, setFavourites] = useState([
-    {
-      Poster:
-        "https://m.media-amazon.com/images/M/MV5BMWY3NTljMjEtYzRiMi00NWM2LTkzNjItZTVmZjE0MTdjMjJhL2ltYWdlL2ltYWdlXkEyXkFqcGdeQXVyNTQ4NTc5OTU@._V1_SX300.jpg",
-      Title: "Sherlock",
-      Type: "series",
-      Year: "2010–2017",
-      imdbID: "tt1475582",
-    },
-  ]);
+  const [favourites, setFavourites] = useState([]);
   const getMovieRequest = async (searchValue) => {
     const url = `http://www.omdbapi.com/?s=${searchValue}&apikey=4059f720`;
-    // const url = `http://www.omdbapi.com/?s=sherlock&apikey=4059f720`;
-
     const response = await fetch(url);
     const responseJson = await response.json();
-    // console.log(responseJson);
+
+    console.log(responseJson);
     // setMovies(responseJson.Search);
     if (responseJson.Search) {
       setMovies(responseJson.Search);
     }
   };
 
-  const addFavouriteMovie = (movie) => {
+  const addFavouriteMovie = async (movie) => {
+    movie.userid = auth.currentUser.uid;
+    await db.collection("favorites").doc().set(movie);
     const newFavouriteList = [...favourites, movie];
     setFavourites(newFavouriteList);
-    saveToLocalStorage(newFavouriteList);
   };
 
-  const saveToLocalStorage = (items) => {
-    localStorage.setItem("react-movie-app-favourites", JSON.stringify(items));
-  };
-  const removeFavouriteMovie = (movie) => {
+  const removeFavouriteMovie = async (movie) => {
+    const imdbID = movie.imdbID;
+    const query = await db
+      .collection("favorites")
+      .where("imdbID", "==", imdbID)
+      .get();
+    query.forEach((doc) => {
+      doc.ref.delete();
+    });
     const newFavouriteList = favourites.filter(
       (movies) => movies.imdbID !== movie.imdbID
     );
     setFavourites(newFavouriteList);
-    saveToLocalStorage(newFavouriteList);
   };
 
   useEffect(() => {
@@ -59,15 +55,16 @@ function Home({ handleLogout }) {
   }, [searchValue]);
 
   useEffect(() => {
-    if (localStorage.getItem("react-movie-app-favourites")) {
-      const favourites = JSON.parse(
-        localStorage.getItem("react-movie-app-favourites")
-      );
-      setFavourites(favourites);
-    } else setFavourites([]);
-
-    // if(favourites)
-    // setFavourites(favourites);
+    (async () => {
+      const uid = auth.currentUser.uid;
+      const ref = db.collection("favorites");
+      const query = await ref.where("userid", "==", uid).get();
+      const favorites = [];
+      query.docs.forEach((doc) => {
+        favorites.push(doc.data());
+      });
+      setFavourites(favorites);
+    })();
   }, []);
 
   return (
